@@ -114,3 +114,35 @@ class CharacterCandidate(Base):
                 "image_uuid": self.image_uuid, "provider_model": self.provider_model,
                 "cost": self.cost, "selected": self.selected,
                 "created_at": self.created_at.isoformat()}
+
+
+class StoryRevision(Base):
+    __tablename__ = "story_revisions"
+    __table_args__ = (UniqueConstraint("story_id", "version", name="uq_story_revision_version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    story_id: Mapped[str] = mapped_column(ForeignKey("stories.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column()
+    scope: Mapped[str] = mapped_column(String(40))
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str] = mapped_column(String(180))
+    premise: Mapped[str] = mapped_column(Text)
+    story_bible_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    affected_story_bible_sections: Mapped[list] = mapped_column(JSON, default=list)
+    proposed_story_bible_updates: Mapped[dict] = mapped_column(JSON, default=dict)
+    revision_summary: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(30), default="pending_approval", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "story_id": self.story_id, "version": self.version,
+            "scope": self.scope, "feedback": self.feedback, "title": self.title,
+            "premise": self.premise, "story_bible_snapshot": self.story_bible_snapshot,
+            "affected_story_bible_sections": self.affected_story_bible_sections,
+            "proposed_story_bible_updates": self.proposed_story_bible_updates,
+            "revision_summary": self.revision_summary, "status": self.status,
+            "created_at": self.created_at.isoformat(),
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+        }

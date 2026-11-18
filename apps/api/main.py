@@ -20,12 +20,14 @@ from src.core.models import (
     Comment,
     Episode,
     Story,
+    StoryRevision,
 )
 from src.providers.runware.client import RunwareClient, RunwareError
 from src.providers.runware.image import RunwareImageProvider
 from src.providers.runware.text import RunwareTextProvider
 from src.providers.runware.video import RunwareVideoProvider
 from src.story_engine.generation import StoryGenerationService
+from src.story_engine.revision import StoryRevisionGenerationError, StoryRevisionService
 from src.story_engine.story_bible import empty_story_bible
 from src.story_engine.workflow import EpisodeStatus
 
@@ -43,6 +45,16 @@ class StoryCreate(BaseModel):
     title: str = Field(min_length=1, max_length=180)
     premise: str = Field(min_length=10, max_length=4000)
     language: str = "tr"
+
+
+
+class StoryRevisionCreate(BaseModel):
+    feedback: str = Field(min_length=5, max_length=5000)
+    scope: str = Field(default="whole_story", pattern="^(whole_story|premise|characters|ending|tone)$")
+
+
+class StoryRevisionDecision(BaseModel):
+    approve_story_bible_updates: bool = False
 
 
 class EpisodeCreate(BaseModel):
@@ -397,3 +409,127 @@ def approve_cast(session_id: str, db: Session = Depends(get_db)):
     session.status = CastingStatus.CAST_LOCKED.value
     db.commit()
     return serialize_casting(db, session)
+
+
+def serialize_story_revision(revision: StoryRevision) -> dict:
+    return revision.to_dict()
+
+
+def ensure_initial_story_revision(db: Session, story: Story) -> StoryRevision:
+    existing = db.scalar(select(StoryRevision).where(
+        StoryRevision.story_id == story.id
+    ).order_by(StoryRevision.version.desc()))
+    if existing:
+        return existing
+    baseline = StoryRevision(
+        story_id=story.id, version=1, scope="initial", feedback=None,
+        title=story.title, premise=story.premise,
+        story_bible_snapshot=dict(story.story_bible or {}),
+        affected_story_bible_sections=[], proposed_story_bible_updates={},
+        revision_summary="Initial story version", status="approved",
+    )
+    db.add(baseline)
+    db.flush()
+    return baseline
+
+
+@app.get(f"{settings.api_prefix}/stories/{{story_id}}/revisions")
+def list_story_revisions(story_id: str, db: Session = Depends(get_db)):
+    story = db.get(Story, story_id)
+    if story is None:
+        raise HTTPException(status_code=404, detail="Story not found")
+    ensure_initial_story_revision(db, story)
+    db.commit()
+    revisions = db.scalars(select(StoryRevision).where(
+        StoryRevision.story_id == story.id
+    ).order_by(StoryRevision.version.desc())).all()
+    return [serialize_story_revision(item) for item in revisions]
+
+
+@app.post(f"{settings.api_prefix}/stories/{{story_id}}/revisions", status_code=201)
+async def create_story_revision(story_id: str, payload: StoryRevisionCreate,
+                                db: Session = Depends(get_db),
+                                client: RunwareClient = Depends(runware_client)):
+    story = db.get(Story, story_id)
+    if story is None:
+        raise HTTPException(status_code=404, detail="Story not found")
+    pending = db.scalar(select(StoryRevision).where(
+        StoryRevision.story_id == story.id,
+        StoryRevision.status == "pending_approval",
+    ))
+    if pending:
+        raise HTTPException(status_code=409,
+            detail="Approve or reject the pending story revision before creating another")
+    latest = ensure_initial_story_revision(db, story)
+    try:
+        generated = await StoryRevisionService(RunwareTextProvider(client)).revise(
+            title=story.title, premise=story.premise,
+            story_bible=dict(story.story_bible or {}),
+            feedback=payload.feedback, scope=payload.scope, language=story.language,
+        )
+    except (RunwareError, StoryRevisionGenerationError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"Story revision failed: {exc}") from exc
+    revision = StoryRevision(
+        story_id=story.id, version=latest.version + 1, scope=payload.scope,
+        feedback=payload.feedback, title=generated["title"],
+        premise=generated["premise"],
+        story_bible_snapshot=dict(story.story_bible or {}),
+        affected_story_bible_sections=generated["affected_story_bible_sections"],
+        proposed_story_bible_updates=generated["proposed_story_bible_updates"],
+        revision_summary=generated["revision_summary"],
+        status="pending_approval",
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    return serialize_story_revision(revision)
+
+
+@app.post(f"{settings.api_prefix}/stories/{{story_id}}/revisions/{{revision_id}}/approve")
+def approve_story_revision(story_id: str, revision_id: str,
+                           payload: StoryRevisionDecision,
+                           db: Session = Depends(get_db)):
+    story = db.get(Story, story_id)
+    revision = db.get(StoryRevision, revision_id)
+    if story is None or revision is None or revision.story_id != story_id:
+        raise HTTPException(status_code=404, detail="Story or revision not found")
+    if revision.status != "pending_approval":
+        raise HTTPException(status_code=409, detail="Only pending revisions can be approved")
+    updates = dict(revision.proposed_story_bible_updates or {})
+    if updates and not payload.approve_story_bible_updates:
+        raise HTTPException(status_code=409,
+            detail="This revision proposes Story Bible changes; explicitly approve them or reject the revision")
+    allowed_sections = {
+        "relationships", "locations", "world_rules", "timeline",
+        "episode_summaries", "unresolved_threads", "next_arc",
+    }
+    if set(updates) - allowed_sections:
+        raise HTTPException(status_code=409, detail="Revision contains unsupported Story Bible updates")
+    story.title = revision.title
+    story.premise = revision.premise
+    if updates:
+        bible = dict(story.story_bible or {})
+        for key, value in updates.items():
+            bible[key] = value
+        bible["canon_version"] = int(bible.get("canon_version", 1)) + 1
+        story.story_bible = bible
+    revision.status = "approved"
+    revision.decided_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(revision)
+    return {"story": story.to_dict(), "revision": serialize_story_revision(revision)}
+
+
+@app.post(f"{settings.api_prefix}/stories/{{story_id}}/revisions/{{revision_id}}/reject")
+def reject_story_revision(story_id: str, revision_id: str, db: Session = Depends(get_db)):
+    revision = db.get(StoryRevision, revision_id)
+    if revision is None or revision.story_id != story_id:
+        raise HTTPException(status_code=404, detail="Story revision not found")
+    if revision.status != "pending_approval":
+        raise HTTPException(status_code=409, detail="Only pending revisions can be rejected")
+    revision.status = "rejected"
+    revision.decided_at = datetime.now(UTC)
+    db.commit()
+    return serialize_story_revision(revision)
+

@@ -80,3 +80,8 @@ POST /api/v1/stories/{story_id}/episodes/generate creates a structured episode f
 POST /api/v1/media/video submits a video task; GET /api/v1/media/tasks/{task_uuid} polls it.
 Runware returns the output URL and cost. Multi-clip rendering and media persistence remain separate
 production steps; ElevenLabs narration remains configured independently.
+
+
+## Story revisions
+
+Submit natural-language feedback to create a versioned story proposal. Review and approve or reject it without overwriting earlier versions or regenerating casting, approved character references, episodes, images, or narration. See [docs/STORY_REVISION_WORKFLOW.md](docs/STORY_REVISION_WORKFLOW.md).
