@@ -514,14 +514,15 @@ def approve_story_revision(story_id: str, revision_id: str,
     }
     if set(updates) - allowed_sections:
         raise HTTPException(status_code=409, detail="Revision contains unsupported Story Bible updates")
+    bible = dict(story.story_bible or {})
+    bible["title"] = revision.title
+    bible["premise"] = revision.premise
+    for key, value in updates.items():
+        bible[key] = value
+    bible["canon_version"] = int(bible.get("canon_version", 1)) + 1
     story.title = revision.title
     story.premise = revision.premise
-    if updates:
-        bible = dict(story.story_bible or {})
-        for key, value in updates.items():
-            bible[key] = value
-        bible["canon_version"] = int(bible.get("canon_version", 1)) + 1
-        story.story_bible = bible
+    story.story_bible = bible
     revision.status = "approved"
     revision.decided_at = datetime.now(UTC)
     db.commit()
