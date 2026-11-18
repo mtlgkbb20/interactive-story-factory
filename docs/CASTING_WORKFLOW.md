@@ -36,5 +36,6 @@ provider URLs, so production deployments should copy approved assets into durabl
 - A role cannot be selected from another role or another casting session.
 - A cast cannot be locked until all roles have a selected candidate and an approved reference URL.
 - Casting never overwrites Story Bible data or generated media.
-- The episode-generation endpoint is not silently changed to bypass casting; enforcing the gate on episode
-  generation is a separate integration step once the UI and image persistence lifecycle are ready.
+- The episode-generation endpoint rejects generation until the latest casting session is locked. On approval,
+  selected character definitions and reference URLs are added to the Story Bible so the text model can preserve
+  canon while writing subsequent episodes.
