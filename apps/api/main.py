@@ -7,13 +7,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.community_engine.classifier import classify_comment
+from src.casting_engine.generation import CastingDirector, CastingGenerationError\nfrom src.casting_engine.workflow import CastingStatus\nfrom src.community_engine.classifier import classify_comment
 from src.community_engine.voting import tally_votes
 from src.core.config import settings
 from src.core.database import Base, engine, get_db
-from src.core.models import Comment, Episode, Story
+from src.core.models import (CharacterCandidate, CharacterRole, CastingSession, Comment, Episode, Story)
 from src.providers.runware.client import RunwareClient, RunwareError
-from src.providers.runware.text import RunwareTextProvider
+from src.providers.runware.text import RunwareTextProvider\nfrom src.providers.runware.image import RunwareImageProvider
 from src.providers.runware.video import RunwareVideoProvider
 from src.story_engine.generation import StoryGenerationService
 from src.story_engine.story_bible import empty_story_bible
@@ -136,6 +136,17 @@ class EpisodeGenerate(BaseModel):
     voting_hours: int = Field(default=24, ge=1, le=168)
 
 
+class CastingCreate(BaseModel):
+    genre: str | None = Field(default=None, max_length=100)
+    period: str | None = Field(default=None, max_length=100)
+    tone: str | None = Field(default=None, max_length=300)
+    language: str = "tr"
+
+
+class CandidateSelect(BaseModel):
+    candidate_id: str = Field(min_length=1, max_length=36)
+
+
 class VideoGenerate(BaseModel):
     prompt: str = Field(min_length=5, max_length=12000)
     model: str | None = None
@@ -196,3 +207,147 @@ async def get_media_task(task_uuid: str, client: RunwareClient = Depends(runware
     except RunwareError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return job.__dict__
+
+
+
+def get_casting_roles(db: Session, session_id: str):
+    return db.scalars(select(CharacterRole).where(
+        CharacterRole.casting_session_id == session_id
+    ).order_by(CharacterRole.created_at)).all()
+
+
+def serialize_casting(db: Session, session: CastingSession):
+    roles = get_casting_roles(db, session.id)
+    result = []
+    for role in roles:
+        candidates = db.scalars(select(CharacterCandidate).where(
+            CharacterCandidate.role_id == role.id
+        ).order_by(CharacterCandidate.created_at)).all()
+        result.append(role.to_dict(candidates))
+    return session.to_dict(result)
+
+
+@app.post(f"{settings.api_prefix}/stories/{{story_id}}/casting", status_code=201)
+async def create_casting(story_id: str, payload: CastingCreate,
+                         db: Session = Depends(get_db),
+                         client: RunwareClient = Depends(runware_client)):
+    story = db.get(Story, story_id)
+    if story is None:
+        raise HTTPException(status_code=404, detail="Story not found")
+    try:
+        roles = await CastingDirector(RunwareTextProvider(client)).create_cast(
+            title=story.title, premise=story.premise, genre=payload.genre,
+            period=payload.period, tone=payload.tone, language=payload.language)
+    except (RunwareError, CastingGenerationError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Casting generation failed: {exc}") from exc
+    session = CastingSession(story_id=story.id,
+        status=CastingStatus.CANDIDATES_PENDING.value,
+        creative_brief={"genre": payload.genre, "period": payload.period,
+                        "tone": payload.tone, "language": payload.language})
+    db.add(session)
+    db.flush()
+    for definition in roles:
+        db.add(CharacterRole(casting_session_id=session.id,
+            role_key=definition["role_key"], display_name=definition["display_name"],
+            role_definition=definition))
+    db.commit()
+    db.refresh(session)
+    return serialize_casting(db, session)
+
+
+@app.get(f"{settings.api_prefix}/casting/{{session_id}}")
+def get_casting(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(CastingSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Casting session not found")
+    return serialize_casting(db, session)
+
+
+@app.post(f"{settings.api_prefix}/casting/{{session_id}}/roles/{{role_id}}/candidates")
+async def generate_role_candidates(session_id: str, role_id: str,
+                                   db: Session = Depends(get_db),
+                                   client: RunwareClient = Depends(runware_client)):
+    session = db.get(CastingSession, session_id)
+    role = db.get(CharacterRole, role_id)
+    if session is None or role is None or role.casting_session_id != session_id:
+        raise HTTPException(status_code=404, detail="Casting session or role not found")
+    if session.status == CastingStatus.CAST_LOCKED.value:
+        raise HTTPException(status_code=409, detail="Locked cast cannot be modified")
+    prompts = role.role_definition.get("candidate_prompts", [])
+    if len(prompts) != 4:
+        raise HTTPException(status_code=409, detail="Role does not have four valid candidate prompts")
+    try:
+        provider = RunwareImageProvider(client)
+        generated = []
+        for prompt in prompts:
+            generated.append(await provider.generate(prompt))
+    except (RunwareError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Candidate image generation failed: {exc}") from exc
+    for prompt, asset in zip(prompts, generated, strict=True):
+        db.add(CharacterCandidate(role_id=role.id, prompt=prompt,
+            image_url=asset["image_url"], image_uuid=asset.get("image_uuid"),
+            provider_model=asset.get("model"),
+            cost=str(asset["cost"]) if asset.get("cost") is not None else None))
+    session.status = CastingStatus.AWAITING_SELECTION.value
+    db.commit()
+    return serialize_casting(db, session)
+
+
+@app.post(f"{settings.api_prefix}/casting/{{session_id}}/roles/{{role_id}}/select")
+def select_role_candidate(session_id: str, role_id: str, payload: CandidateSelect,
+                          db: Session = Depends(get_db)):
+    session = db.get(CastingSession, session_id)
+    role = db.get(CharacterRole, role_id)
+    if session is None or role is None or role.casting_session_id != session_id:
+        raise HTTPException(status_code=404, detail="Casting session or role not found")
+    if session.status == CastingStatus.CAST_LOCKED.value:
+        raise HTTPException(status_code=409, detail="Locked cast cannot be modified")
+    candidate = db.get(CharacterCandidate, payload.candidate_id)
+    if candidate is None or candidate.role_id != role.id:
+        raise HTTPException(status_code=404, detail="Candidate does not belong to this role")
+    candidates = db.scalars(select(CharacterCandidate).where(
+        CharacterCandidate.role_id == role.id)).all()
+    for item in candidates:
+        item.selected = item.id == candidate.id
+    role.selected_candidate_id = candidate.id
+    role.reference_image_url = None
+    role.reference_approved = False
+    session.status = CastingStatus.REFERENCES_PENDING.value
+    db.commit()
+    return serialize_casting(db, session)
+
+
+@app.post(f"{settings.api_prefix}/casting/{{session_id}}/roles/{{role_id}}/reference")
+def approve_role_reference(session_id: str, role_id: str, db: Session = Depends(get_db)):
+    session = db.get(CastingSession, session_id)
+    role = db.get(CharacterRole, role_id)
+    if session is None or role is None or role.casting_session_id != session_id:
+        raise HTTPException(status_code=404, detail="Casting session or role not found")
+    if session.status == CastingStatus.CAST_LOCKED.value:
+        raise HTTPException(status_code=409, detail="Locked cast cannot be modified")
+    if not role.selected_candidate_id:
+        raise HTTPException(status_code=409, detail="Select a candidate before approving its reference")
+    candidate = db.get(CharacterCandidate, role.selected_candidate_id)
+    if candidate is None or candidate.role_id != role.id:
+        raise HTTPException(status_code=409, detail="Selected candidate is unavailable")
+    role.reference_image_url = candidate.image_url
+    role.reference_approved = True
+    db.commit()
+    return serialize_casting(db, session)
+
+
+@app.post(f"{settings.api_prefix}/casting/{{session_id}}/approve")
+def approve_cast(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(CastingSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Casting session not found")
+    if session.status == CastingStatus.CAST_LOCKED.value:
+        return serialize_casting(db, session)
+    roles = get_casting_roles(db, session.id)
+    if not roles or any(not role.selected_candidate_id or not role.reference_image_url
+                        or not role.reference_approved for role in roles):
+        raise HTTPException(status_code=409,
+            detail="Every role needs a selected candidate and an approved reference")
+    session.status = CastingStatus.CAST_LOCKED.value
+    db.commit()
+    return serialize_casting(db, session)
