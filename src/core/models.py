@@ -71,7 +71,7 @@ class CastingSession(Base):
     def to_dict(self, roles: list) -> dict:
         return {"id": self.id, "story_id": self.story_id, "status": self.status,
                 "creative_brief": self.creative_brief,
-                "roles": [role.to_dict() for role in roles],
+                "roles": roles,
                 "created_at": self.created_at.isoformat()}
 
 
