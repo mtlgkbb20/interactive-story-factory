@@ -1,15 +1,14 @@
 # Provider Integration
 
-## Canonical scene brief
-Each scene defines subject/action, location/time, character reference IDs, camera framing/movement, lighting, dialogue, sound design, target duration, 9:16 aspect ratio, negative constraints, and continuity constraints.
+## Runware
+Runware is the unified inference gateway for text, image and video. Configure RUNWARE_API_KEY once.
+Text and video models are independent settings (RUNWARE_TEXT_MODEL and RUNWARE_VIDEO_MODEL).
+Both default to auto so Runware's model router selects a suitable model; pin an AIR identifier
+when a reproducible model is required.
 
-## Adapter contract
-Implement the VideoProvider scene-generation contract and return GeneratedAsset. Persist the canonical brief and exact model-specific prompt. Classify retryable rate limits/timeouts separately from invalid requests and policy refusals.
-
-## Benchmark protocol
-Run identical briefs against at least three eligible models where access permits. Record model/version, prompt template version, reference asset hashes, output URI/duration, latency/cost, prompt adherence, motion naturalness, realism, character consistency, and reviewer notes.
-
-Initial score weights: realism 25%, motion 20%, prompt adherence 20%, retention potential 15%, audio 10%, character consistency 10%. Calibrate using actual evaluations.
+Text uses textInference and validates generated JSON before saving an episode. Video uses
+videoInference with deliveryMethod=async. Keep its task UUID and poll getResponse until success
+or error. Store model, prompt, task UUID, output URL and cost.
 
 ## ElevenLabs
-Use ElevenLabs for spoken narration and character dialogue. Keep voice IDs in configuration. Ambient, Foley, and ASMR sound use a separate sound-design path.
+ElevenLabs remains the dedicated narration provider. Voice IDs and model are configured in .env.

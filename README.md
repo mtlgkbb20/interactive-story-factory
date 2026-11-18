@@ -67,3 +67,12 @@ See [.env.example](.env.example). Never commit API keys, access tokens, generate
 ## Roadmap
 
 See [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+
+## Runware setup
+
+Set RUNWARE_API_KEY in .env. Text and video models are configured separately and default to auto.
+POST /api/v1/stories/{story_id}/episodes/generate creates a structured episode from the Story Bible.
+POST /api/v1/media/video submits a video task; GET /api/v1/media/tasks/{task_uuid} polls it.
+Runware returns the output URL and cost. Multi-clip rendering and media persistence remain separate
+production steps; ElevenLabs narration remains configured independently.

@@ -14,3 +14,8 @@ Use canonical scene briefs and provider-specific prompt adapters. Persist model/
 
 ## Social platform strategy
 Begin with manual comment import. Official TikTok/Instagram access depends on account eligibility, scopes, app review, and publishing permissions. Do not rely on scraping or assume research APIs are available to ordinary creators.
+
+## Runware provider integration
+Runware is the shared gateway for text and video. Model selection is configured independently per
+modality; auto delegates selection to the Runware router. Video tasks are asynchronous and polled
+through getResponse. ElevenLabs remains the dedicated narration provider.

@@ -10,7 +10,13 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str | None = None
     elevenlabs_default_voice_id: str | None = None
     elevenlabs_model_id: str = "eleven_multilingual_v2"
+    runware_api_key: str | None = None
+    runware_base_url: str = "https://api.runware.ai/v1"
+    runware_text_model: str = "auto"
+    runware_video_model: str = "auto"
+    runware_video_width: int = 1080
+    runware_video_height: int = 1920
+    runware_video_duration: int = 5
     default_voting_hours: int = 24
-
 
 settings = Settings()
