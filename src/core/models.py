@@ -59,3 +59,58 @@ class Comment(Base):
     classification: Mapped[str] = mapped_column(String(40), index=True)
     selected_option: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class CastingSession(Base):
+    __tablename__ = "casting_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    story_id: Mapped[str] = mapped_column(ForeignKey("stories.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(40), default="candidates_pending", index=True)
+    creative_brief: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self, roles: list) -> dict:
+        return {"id": self.id, "story_id": self.story_id, "status": self.status,
+                "creative_brief": self.creative_brief,
+                "roles": roles,
+                "created_at": self.created_at.isoformat()}
+
+
+class CharacterRole(Base):
+    __tablename__ = "casting_roles"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    casting_session_id: Mapped[str] = mapped_column(
+        ForeignKey("casting_sessions.id", ondelete="CASCADE"), index=True)
+    role_key: Mapped[str] = mapped_column(String(80))
+    display_name: Mapped[str] = mapped_column(String(120))
+    role_definition: Mapped[dict] = mapped_column(JSON, default=dict)
+    selected_candidate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reference_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_approved: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self, candidates: list | None = None) -> dict:
+        return {"id": self.id, "role_key": self.role_key, "display_name": self.display_name,
+                "role_definition": self.role_definition,
+                "selected_candidate_id": self.selected_candidate_id,
+                "reference_image_url": self.reference_image_url,
+                "reference_approved": self.reference_approved,
+                "candidates": [candidate.to_dict() for candidate in (candidates or [])]}
+
+
+class CharacterCandidate(Base):
+    __tablename__ = "character_candidates"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    role_id: Mapped[str] = mapped_column(ForeignKey("casting_roles.id", ondelete="CASCADE"), index=True)
+    prompt: Mapped[str] = mapped_column(Text)
+    image_url: Mapped[str] = mapped_column(Text)
+    image_uuid: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    provider_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    cost: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    selected: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "prompt": self.prompt, "image_url": self.image_url,
+                "image_uuid": self.image_uuid, "provider_model": self.provider_model,
+                "cost": self.cost, "selected": self.selected,
+                "created_at": self.created_at.isoformat()}
