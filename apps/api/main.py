@@ -81,6 +81,14 @@ def create_story(payload: StoryCreate, db: Session = Depends(get_db)):
     story = Story(title=payload.title, premise=payload.premise, language=payload.language,
                   story_bible=empty_story_bible(payload.title, payload.premise))
     db.add(story)
+    db.flush()
+    db.add(StoryRevision(
+        story_id=story.id, version=1, scope="initial", feedback=None,
+        title=story.title, premise=story.premise,
+        story_bible_snapshot=dict(story.story_bible or {}),
+        affected_story_bible_sections=[], proposed_story_bible_updates={},
+        revision_summary="Initial story version", status="approved",
+    ))
     db.commit()
     db.refresh(story)
     return story.to_dict()
