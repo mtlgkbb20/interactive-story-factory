@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     runware_base_url: str = "https://api.runware.ai/v1"
     runware_text_model: str = "auto"
     runware_video_model: str = "auto"
+    runware_image_model: str = "auto"
     runware_video_width: int = 1080
     runware_video_height: int = 1920
     runware_video_duration: int = 5
