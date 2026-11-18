@@ -2,12 +2,14 @@ import pytest
 
 from src.casting_engine.generation import CastingDirector, CastingGenerationError
 
+
 class FakeTextProvider:
     def __init__(self, result):
         self.result = result
 
     async def generate_json(self, *args, **kwargs):
         return self.result
+
 
 def valid_role():
     return {
@@ -17,6 +19,7 @@ def valid_role():
         "wardrobe": "simple dark jacket", "visual_style": "cinematic photorealism",
         "candidate_prompts": [f"portrait candidate {n}" for n in range(4)],
     }
+
 
 @pytest.mark.asyncio
 async def test_casting_director_accepts_valid_story_specific_roles():
