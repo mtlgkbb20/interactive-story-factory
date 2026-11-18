@@ -7,13 +7,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.casting_engine.generation import CastingDirector, CastingGenerationError\nfrom src.casting_engine.workflow import CastingStatus\nfrom src.community_engine.classifier import classify_comment
+from src.casting_engine.generation import CastingDirector, CastingGenerationError
+from src.casting_engine.workflow import CastingStatus
+from src.community_engine.classifier import classify_comment
 from src.community_engine.voting import tally_votes
 from src.core.config import settings
 from src.core.database import Base, engine, get_db
 from src.core.models import (CharacterCandidate, CharacterRole, CastingSession, Comment, Episode, Story)
 from src.providers.runware.client import RunwareClient, RunwareError
-from src.providers.runware.text import RunwareTextProvider\nfrom src.providers.runware.image import RunwareImageProvider
+from src.providers.runware.image import RunwareImageProvider
+from src.providers.runware.text import RunwareTextProvider
 from src.providers.runware.video import RunwareVideoProvider
 from src.story_engine.generation import StoryGenerationService
 from src.story_engine.story_bible import empty_story_bible
