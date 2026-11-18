@@ -3,7 +3,7 @@ from typing import Any
 
 def empty_story_bible(title: str, premise: str) -> dict[str, Any]:
     return {"title": title, "premise": premise, "canon_version": 1, "characters": [],
-            "relationships": [], "locations": [], "world_rules": [], "timeline": [],
+            "relationships": [], "locations": [], "world_rules": [], "timeline": [], "character_arcs": [],
             "episode_summaries": [], "unresolved_threads": [], "community_ideas": [],
             "rejected_ideas": [], "next_arc": None}
 

@@ -509,7 +509,7 @@ def approve_story_revision(story_id: str, revision_id: str,
         raise HTTPException(status_code=409,
             detail="This revision proposes Story Bible changes; explicitly approve them or reject the revision")
     allowed_sections = {
-        "relationships", "locations", "world_rules", "timeline",
+        "relationships", "locations", "world_rules", "timeline", "character_arcs",
         "episode_summaries", "unresolved_threads", "next_arc",
     }
     if set(updates) - allowed_sections:

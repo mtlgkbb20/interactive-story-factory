@@ -3,7 +3,7 @@ from typing import Any
 from src.providers.runware.text import RunwareTextProvider
 
 ALLOWED_BIBLE_SECTIONS = {
-    "relationships", "locations", "world_rules", "timeline",
+    "relationships", "locations", "world_rules", "timeline", "character_arcs",
     "episode_summaries", "unresolved_threads", "next_arc",
 }
 
@@ -13,10 +13,10 @@ Return exactly one JSON object with:
 - premise: revised story premise, 10-4000 characters
 - revision_summary: concise explanation of what changed
 - affected_story_bible_sections: array using only relationships, locations, world_rules, timeline,
-  episode_summaries, unresolved_threads, next_arc
+  episode_summaries, unresolved_threads, next_arc, character_arcs
 - proposed_story_bible_updates: object containing only those same allowed section keys and proposed values.
-Do not include a characters key. Never alter character identities, physical descriptions, wardrobe,
-casting selections, approved reference image URLs, or any media asset. Do not regenerate episodes,
+Never include or modify the characters key, physical identities, physical descriptions, wardrobe,
+casting selections, approved reference image URLs, or any media asset. Character motivation and arc changes may be proposed only under character_arcs. Do not regenerate episodes,
 scenes, images, or narration. Preserve every story element not targeted by the user's scope and feedback.
 When no Story Bible changes are necessary, return an empty array and empty object.
 A revision is a proposal, not canon; clearly identify any affected sections rather than silently changing canon.

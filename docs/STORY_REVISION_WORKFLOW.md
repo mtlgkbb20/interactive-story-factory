@@ -24,7 +24,7 @@ Story revision is a proposal-and-approval workflow. It never overwrites prior ve
 - Version 1 is captured when a story is created; legacy stories get a baseline snapshot on first history access/revision.
 - A proposed revision is not live until approved.
 - Every revision stores its feedback, generated title/premise, Story Bible snapshot, impact list and proposed updates.
-- Character records and approved visual reference URLs are protected from this workflow.
+- Character identity records and approved visual reference URLs are protected. Narrative motivations/arcs may be proposed under character_arcs and require explicit Story Bible approval.
 - Only allowlisted non-character Story Bible sections can be updated, and only with explicit approval.
 - Existing episodes and media assets are not regenerated or modified.
 - The current casting session and its lock state are not changed by story revision.

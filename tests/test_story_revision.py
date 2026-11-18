@@ -57,3 +57,20 @@ async def test_story_revision_rejects_unlisted_bible_updates():
             title="Old", premise="An old premise with enough characters.",
             story_bible={}, feedback="Change the rules.", scope="whole_story",
         )
+
+
+
+@pytest.mark.asyncio
+async def test_story_revision_allows_character_arc_updates_without_touching_cast_records():
+    result = valid_revision()
+    result["affected_story_bible_sections"] = ["character_arcs"]
+    result["proposed_story_bible_updates"] = {
+        "character_arcs": [{"role_key": "protagonist", "motivation": "protect a sibling"}]
+    }
+    service = StoryRevisionService(FakeTextProvider(result))
+    proposal = await service.revise(
+        title="Old", premise="An old premise with enough characters.",
+        story_bible={"characters": [{"name": "Mira", "reference_image_url": "locked.png"}]},
+        feedback="Give the protagonist a stronger motivation.", scope="characters",
+    )
+    assert proposal["proposed_story_bible_updates"]["character_arcs"][0]["motivation"]
