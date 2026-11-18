@@ -169,6 +169,12 @@ async def generate_episode(story_id: str, payload: EpisodeGenerate,
     story = db.get(Story, story_id)
     if story is None:
         raise HTTPException(status_code=404, detail="Story not found")
+    latest_casting = db.scalar(select(CastingSession).where(
+        CastingSession.story_id == story.id
+    ).order_by(CastingSession.created_at.desc()))
+    if latest_casting is None or latest_casting.status != CastingStatus.CAST_LOCKED.value:
+        raise HTTPException(status_code=409,
+            detail="Complete and approve story casting before generating an episode")
     try:
         generated = await StoryGenerationService(RunwareTextProvider(client)).generate_episode(
             title=story.title, premise=story.premise, story_bible=story.story_bible,
@@ -283,6 +289,14 @@ async def generate_role_candidates(session_id: str, role_id: str,
             generated.append(await provider.generate(prompt))
     except (RunwareError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Candidate image generation failed: {exc}") from exc
+    # Regeneration preserves previous candidate records but invalidates this role's current selection.
+    role.selected_candidate_id = None
+    role.reference_image_url = None
+    role.reference_approved = False
+    previous_candidates = db.scalars(select(CharacterCandidate).where(
+        CharacterCandidate.role_id == role.id)).all()
+    for previous in previous_candidates:
+        previous.selected = False
     for prompt, asset in zip(prompts, generated, strict=True):
         db.add(CharacterCandidate(role_id=role.id, prompt=prompt,
             image_url=asset["image_url"], image_uuid=asset.get("image_uuid"),
@@ -348,6 +362,28 @@ def approve_cast(session_id: str, db: Session = Depends(get_db)):
                         or not role.reference_approved for role in roles):
         raise HTTPException(status_code=409,
             detail="Every role needs a selected candidate and an approved reference")
+    story = db.get(Story, session.story_id)
+    if story is None:
+        raise HTTPException(status_code=404, detail="Story not found")
+    bible = dict(story.story_bible or {})
+    characters = [item for item in bible.get("characters", [])
+                  if item.get("casting_role_key") not in {role.role_key for role in roles}]
+    for role in roles:
+        definition = dict(role.role_definition)
+        characters.append({
+            "casting_role_key": role.role_key,
+            "name": role.display_name,
+            "narrative_function": definition.get("narrative_function"),
+            "age_range": definition.get("age_range"),
+            "personality": definition.get("personality"),
+            "physical_description": definition.get("physical_description"),
+            "wardrobe": definition.get("wardrobe"),
+            "visual_style": definition.get("visual_style"),
+            "reference_image_url": role.reference_image_url,
+        })
+    bible["characters"] = characters
+    bible["canon_version"] = int(bible.get("canon_version", 1)) + 1
+    story.story_bible = bible
     session.status = CastingStatus.CAST_LOCKED.value
     db.commit()
     return serialize_casting(db, session)
