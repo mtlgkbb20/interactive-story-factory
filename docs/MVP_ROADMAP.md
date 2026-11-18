@@ -11,7 +11,7 @@
 - [ ] Alembic migrations, authentication, admin review UI
 
 ## Story generation
-- [ ] LLM provider and structured-output validation
+- [x] Runware LLM provider and JSON response validation
 - [ ] Episode outline/script generation
 - [ ] Character sheets and reference image registry
 - [ ] Continuity retrieval and contradiction checks
@@ -19,7 +19,7 @@
 
 ## Media production
 - [ ] Image provider adapters
-- [ ] At least two video model adapters
+- [x] Runware video adapter with asynchronous task polling
 - [ ] Provider-specific prompt adapters and benchmark runner
 - [ ] ElevenLabs voice profiles and pronunciation dictionary
 - [ ] FFmpeg assembly, captions, sound mix, thumbnail
