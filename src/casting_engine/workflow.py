@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class CastingStatus(StrEnum):
     CANDIDATES_PENDING = "candidates_pending"
     AWAITING_SELECTION = "awaiting_selection"
