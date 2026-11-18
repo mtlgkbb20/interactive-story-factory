@@ -69,7 +69,7 @@ See [.env.example](.env.example). Never commit API keys, access tokens, generate
 See [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 
-## Runware setup
+## Story casting\n\nThe story-specific casting flow is documented in [docs/CASTING_WORKFLOW.md](docs/CASTING_WORKFLOW.md). It creates role definitions with the text model, generates four portrait candidates per role with Runware image inference, and requires explicit selection and reference approval before the cast can be locked. Set `RUNWARE_IMAGE_MODEL` in `.env`; `auto` uses Runware model routing. Reference-image conditioning is model-dependent.\n\n## Runware setup
 
 Set RUNWARE_API_KEY in .env. Text and video models are configured separately and default to auto.
 POST /api/v1/stories/{story_id}/episodes/generate creates a structured episode from the Story Bible.
